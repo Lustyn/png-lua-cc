@@ -1,7 +1,7 @@
 PNGLua
 ======
 
-A pure lua implementation of a PNG decoder
+A pure lua implementation of a PNG decoder for ComputerCraft
 
 Usage
 -----

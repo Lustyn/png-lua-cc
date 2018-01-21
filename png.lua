@@ -52,18 +52,18 @@ local function readInt(stream, bps)
     local bytes = {}
     bps = bps or 4
     for i=1,bps do
-        bytes[i] = stream:read(1):byte()
+        bytes[i] = string.byte(stream.read(1))
     end
     return bytesToNum(bytes)
 end
 
 local function readChar(stream, num)
     num = num or 1
-    return stream:read(num)
+    return stream.read(num)
 end
 
 local function readByte(stream)
-    return stream:read(1):byte()
+    return string.byte(stream.read(1))
 end
 
 local function getDataIHDR(stream, length)
@@ -117,7 +117,7 @@ local function extractChunkData(stream)
             chunkData[type] = getDataIDAT(stream, length, chunkData[type])
         elseif (type == "PLTE") then
             chunkData[type] = getDataPLTE(stream, length)
-        else
+        elseif (type ~= "IEND") then
             readChar(stream, length)
         end
         crc = readChar(stream, 4)
@@ -131,7 +131,7 @@ local function makePixel(stream, depth, colorType, palette)
     local pixelData = { R = 0, G = 0, B = 0, A = 0 }
     local grey
     local index
-    local color 
+    local color
 
     if colorType == 0 then
         grey = readInt(stream, bps)
@@ -182,10 +182,10 @@ local function paethPredict(a, b, c)
     local varB = math.abs(p - b)
     local varC = math.abs(p - c)
 
-    if varA <= varB and varA <= varC then 
-        return a 
-    elseif varB <= varC then 
-        return b 
+    if varA <= varB and varA <= varC then
+        return a
+    elseif varB <= varC then
+        return b
     else
         return c
     end
@@ -237,7 +237,7 @@ end
 
 
 local function pngImage(path, progCallback, verbose, memSave)
-    local stream = io.open(path, "rb")
+    local stream = fs.open(path, "rb")
     local chunkData
     local imStr
     local width = 0
@@ -253,7 +253,7 @@ local function pngImage(path, progCallback, verbose, memSave)
         end
     end
 
-    if readChar(stream, 8) ~= "\137\080\078\071\013\010\026\010" then 
+    if readChar(stream, 8) ~= "\137\080\078\071\013\010\026\010" then
         error "Not a png"
     end
 
@@ -266,26 +266,27 @@ local function pngImage(path, progCallback, verbose, memSave)
     colorType = chunkData.IHDR.colorType
 
     printV("Deflating...")
+    printV("Compression: "..chunkData.IHDR.compression)
     deflate.inflate_zlib {
-        input = chunkData.IDAT.data, 
-        output = function(byte) 
-            output[#output+1] = string.char(byte) 
-        end, 
+        input = chunkData.IDAT.data,
+        output = function(byte)
+            output[#output+1] = string.char(byte)
+        end,
         disable_crc = true
     }
     StringStream = {
         str = table.concat(output),
-        read = function(self, num)
-            local toreturn = self.str:sub(1, num)
-            self.str = self.str:sub(num + 1, self.str:len())
+        read = function(num)
+            local toreturn = string.sub(StringStream.str, 1, num)
+            StringStream.str = string.sub(StringStream.str, num + 1, string.len(StringStream.str))
             return toreturn
-        end  
+        end
     }
 
     printV("Creating pixelmap...")
     for i = 1, height do
         local pixelRow = getPixelRow(StringStream, depth, colorType, chunkData.PLTE, width)
-        if progCallback ~= nil then 
+        if progCallback ~= nil then
             progCallback(i, height, pixelRow)
         end
         if not memSave then
@@ -294,6 +295,7 @@ local function pngImage(path, progCallback, verbose, memSave)
     end
 
     printV("Done.")
+    stream.close()
     return {
         width = width,
         height = height,
